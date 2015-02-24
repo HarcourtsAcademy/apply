@@ -56,8 +56,8 @@ class enrol_apply_enrol_form extends moodleform {
         }
 
 		$mform->addElement('html', '<p>'.$instance->customtext1.'</p>');
-        $mform->addElement('textarea', 'applydescription', get_string('comment', 'enrol_apply'),'cols="80"');
-        $this->add_action_buttons(false, get_string('enrolme', 'enrol_self'));
+//		$mform->addElement('textarea', 'applydescription','','cols="80"');
+        $this->add_action_buttons(false, get_string('submitenrolment', 'enrol_apply'));
 
         $mform->addElement('hidden', 'id');
         $mform->setType('id', PARAM_INT);

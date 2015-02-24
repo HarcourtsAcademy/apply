@@ -23,12 +23,14 @@ $string['cancelmailcontent_desc'] = 'Please use special marks designated email c
 
 $string['confirmusers'] = 'Enrol Confirm';
 
+$string['submitenrolment'] = 'Register';
+
 $string['coursename'] = 'Course';
 $string['applyuser'] = 'First name / Surname';
 $string['applyusermail'] = 'Email';
 $string['applydate'] = 'Enrol date';
-$string['btnconfirm'] = 'Confirm';
-$string['btncancel'] = 'Cancel';
+$string['btnconfirm'] = 'Confirm enrolments';
+$string['btncancel'] = 'Cancel enrolments';
 $string['enrolusers'] = 'Enrol users';
 
 $string['status'] = 'Allow Course enrol confirmation';
@@ -40,12 +42,12 @@ $string['apply:unenrol'] = 'Cancel users from course';
 $string['apply:unenrolapply'] = 'Cancel self from the course'; // is this necessary now?
 $string['apply:unenrolself'] = 'Cancel self from the course';
  
-$string['notification'] = '<b>Enrollment Application successfully sent</b>. <br/><br/>You will be informed by email as soon as your enrollment has been confirmed. If you want to enroll to other courses, please click "course catalogue" in the top menu.';
+$string['notification'] = '<b>You have successfully registered.</b> <br/><br/>You\'ll be notified by email when the course begins.';
 
 $string['sendmailtoteacher'] = 'Send email notification to teachers';
 $string['sendmailtomanager'] = 'Send email notification to managers';
-$string['mailtoteacher_suject'] = 'New Enrollment request!';
-$string['editdescription'] = 'Textarea description';
+$string['mailtoteacher_subject'] = 'New enrolment request from {$a}';
+$string['editdescription'] = 'Enrolment form description';
 $string['comment'] = 'Comment';
 $string['applymanage'] = 'Manage enrolment applications';
 
