@@ -37,6 +37,7 @@ class enrol_apply_enrol_form extends moodleform {
     }
 
     public function definition() {
+        global $DB;
         $mform = $this->_form;
         $instance = $this->_customdata;
         $this->instance = $instance;
@@ -55,9 +56,55 @@ class enrol_apply_enrol_form extends moodleform {
             // nothing?
         }
 
-		$mform->addElement('html', '<p>'.$instance->customtext1.'</p>');
-        $mform->addElement('textarea', 'applydescription', get_string('comment', 'enrol_apply'),'cols="80"');
-        $this->add_action_buttons(false, get_string('enrolme', 'enrol_self'));
+        /* START Academy Patch M#027 enrol_apply: Improve and theme appearance */
+        $mform->addElement('html', '<p>'.$instance->customtext1.'</p>');
+        $mform->addElement('hidden', 'applydescription','');
+        $mform->setType('applydescription', PARAM_TEXT);
+        /* END Academy Patch M#027 */
+
+        //user profile
+        global $USER,$CFG,$DB;
+        require_once($CFG->libdir.'/gdlib.php');
+        require_once($CFG->dirroot.'/user/edit_form.php');
+        require_once($CFG->dirroot.'/user/editlib.php');
+        require_once($CFG->dirroot.'/user/profile/lib.php');
+        require_once($CFG->dirroot.'/user/lib.php');
+
+        $user = $DB->get_record('user',array('id'=>$USER->id));
+        $editoroptions = $filemanageroptions = null;
+
+        $apply_setting = $DB->get_records_sql("select name,value from ".$CFG->prefix."config_plugins where plugin='enrol_apply'");
+
+        $show_standard_user_profile = $show_extra_user_profile = false;
+        if($instance->customint1 != ''){
+            ($instance->customint1 == 0)?$show_standard_user_profile = true:$show_standard_user_profile = false;
+        }else{
+            ($apply_setting['show_standard_user_profile']->value == 0)?$show_standard_user_profile = true:$show_standard_user_profile = false;
+        }
+
+        if($instance->customint2 != ''){
+            ($instance->customint2 == 0)?$show_extra_user_profile = true:$show_extra_user_profile = false;
+        }else{
+            ($apply_setting['show_extra_user_profile']->value == 0)?$show_extra_user_profile = true:$show_extra_user_profile = false;
+        }
+
+        if($show_standard_user_profile){
+            useredit_shared_definition($mform, $editoroptions, $filemanageroptions);
+        }
+        
+        if($show_extra_user_profile){
+            profile_definition($mform, $user->id);
+        }
+
+        $profile_default_values = $user;
+        if (is_object($profile_default_values)) {
+            $profile_default_values = (array)$profile_default_values;
+        }
+        $mform->setDefaults($profile_default_values);
+        
+        /* START Academy Patch M#027 enrol_apply: Improve and theme appearance */
+        $this->add_action_buttons(false, get_string('submitenrolment', 'enrol_apply'));
+        /* END Academy Patch M#027 */
 
         $mform->addElement('hidden', 'id');
         $mform->setType('id', PARAM_INT);
@@ -66,6 +113,10 @@ class enrol_apply_enrol_form extends moodleform {
         $mform->addElement('hidden', 'instance');
         $mform->setType('instance', PARAM_INT);
         $mform->setDefault('instance', $instance->id);
+
+        //$mform->addElement('html',"<script type='text/javascript' src='../../lib/jquery/jquery-1.10.2.min.js'></script>");
+        //$mform->addElement('html','<script>$(document).ready(function(){$(".collapsible-actions a").trigger("click");})</script>');
+        //$mform->addElement('html','<script type="text/javascript">$(document).ready(function(){setTimeout(function(){$(".collapseexpand").trigger("click");},3000)})</script>');
     }
 
     public function validation($data, $files) {

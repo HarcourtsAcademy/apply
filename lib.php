@@ -49,7 +49,9 @@ class enrol_apply_plugin extends enrol_plugin {
 		if ($DB->record_exists('user_enrolments', array('userid'=>$USER->id, 'enrolid'=>$instance->id))) {
 			//TODO: maybe we should tell them they are already enrolled, but can not access the course
 			//return null;
+            /* START Academy Patch M#027 enrol_apply: Improve and theme appearance */
 			return $OUTPUT->container(get_string('notification', 'enrol_apply'), 'alert alert-success');
+            /* END Academy Patch M#027 */
 		}
 
 		if ($instance->enrolstartdate != 0 and $instance->enrolstartdate > time()) {
@@ -78,6 +80,34 @@ class enrol_apply_plugin extends enrol_plugin {
 		$instanceid = optional_param('instance', 0, PARAM_INT);
 		if ($instance->id == $instanceid) {
 			if ($data = $form->get_data()) {
+				$userInfo = $data;
+				$applydescription = $userInfo->applydescription;
+				unset($userInfo->applydescription);
+				$userInfo->id = $USER->id;
+
+				$apply_setting = $DB->get_records_sql("select name,value from ".$CFG->prefix."config_plugins where plugin='enrol_apply'");
+
+				$show_standard_user_profile = $show_extra_user_profile = false;
+		        if($instance->customint1 != ''){
+		            ($instance->customint1 == 0)?$show_standard_user_profile = true:$show_standard_user_profile = false;
+		        }else{
+		            ($apply_setting['show_standard_user_profile']->value == 0)?$show_standard_user_profile = true:$show_standard_user_profile = false;
+		        }
+
+		        if($instance->customint2 != ''){
+		            ($instance->customint2 == 0)?$show_extra_user_profile = true:$show_extra_user_profile = false;
+		        }else{
+		            ($apply_setting['show_extra_user_profile']->value == 0)?$show_extra_user_profile = true:$show_extra_user_profile = false;
+		        }
+
+				if(!$show_standard_user_profile && $show_extra_user_profile){
+					profile_save_data($userInfo);
+					//$res = $DB->update_record('user',$userInfoProfile);
+				}else{
+					profile_save_data($userInfo);
+					//$res = $DB->update_record('user',$userInfo);
+				}
+
 				$enrol = enrol_get_plugin('self');
 				$timestart = time();
 				if ($instance->enrolperiod) {
@@ -93,10 +123,21 @@ class enrol_apply_plugin extends enrol_plugin {
 				}
 
 				$this->enrol_user($instance, $USER->id, $roleid, $timestart, $timeend,1);
-				sendConfirmMailToTeachers($instance->courseid, $instance->id, $data->applydescription);
-				sendConfirmMailToManagers($instance->courseid,$data->applydescription);
+				sendConfirmMailToTeachers($instance, $data, $applydescription);
+				sendConfirmMailToManagers($instance, $data, $applydescription);
 				
-				add_to_log($instance->courseid, 'course', 'enrol', '../enrol/users.php?id='.$instance->courseid, $instance->courseid); //there should be userid somewhere!
+				// Deprecated fixed by Shiro <gigashiro@gmail.com>
+				//add_to_log($instance->courseid, 'course', 'enrol', '../enrol/users.php?id='.$instance->courseid, $instance->courseid); //there should be userid somewhere!
+				$context = context_course::instance($instance->courseid);
+				\core\event\user_enrolment_created::create(
+					array(
+						'objectid' => $instance->id,
+						'courseid' => $instance->courseid, 
+						'context' => $context, 
+						'relateduserid' => $USER->id,
+						'other' => array('enrol' => 'apply')
+					))->trigger();
+
 				redirect("$CFG->wwwroot/course/view.php?id=$instance->courseid");
 			}
 		}
@@ -126,7 +167,9 @@ class enrol_apply_plugin extends enrol_plugin {
 
 		if (has_capability('enrol/manual:manage', $context)) {
 			$managelink = new moodle_url("/enrol/apply/apply.php", array('id'=>$_GET['id'],'enrolid'=>$instance->id));
-			$icons[] = $OUTPUT->action_icon($managelink, new pix_icon('i/users', get_string('confirmenrol', 'enrol_apply'), 'core', array('class'=>'iconsmall')));
+            /* START Academy Patch M#027 enrol_apply: Improve and theme appearance */
+			$icons[] = $OUTPUT->action_icon($managelink, new pix_icon('i/checkpermissions', get_string('confirmenrol', 'enrol_apply'), 'core', array('class'=>'iconsmall')));
+            /* END Academy Patch M#027 */
 		}
 
 		if (has_capability("enrol/manual:enrol", $context)) {
@@ -136,6 +179,49 @@ class enrol_apply_plugin extends enrol_plugin {
 		
 		return $icons;
 	}
+
+       /**
+ 	* Is it possible to hide/show enrol instance via standard UI?
+ 	*
+ 	* @param stdClass $instance
+ 	* @return bool
+ 	*/
+	public function can_hide_show_instance($instance) {
+    		$context = context_course::instance($instance->courseid);
+    		return has_capability('enrol/apply:config', $context);
+	}
+	
+	/**
+ 	* Is it possible to delete enrol instance via standard UI?
+ 	*
+ 	* @param stdClass $instance
+ 	* @return bool
+ 	*/
+ 	
+	public function can_delete_instance($instance) {
+    		$context = context_course::instance($instance->courseid);
+    		return has_capability('enrol/apply:config', $context);
+	}
+	
+	
+	/**
+     	* Sets up navigation entries.
+     	*
+     	* @param stdClass $instancesnode
+     	* @param stdClass $instance
+     	* @return void
+     	*/
+    	public function add_course_navigation($instancesnode, stdClass $instance) {
+        if ($instance->enrol !== 'apply') {
+             throw new coding_exception('Invalid enrol instance type!');
+        }
+
+        $context = context_course::instance($instance->courseid);
+        if (has_capability('enrol/apply:config', $context)) {
+            $managelink = new moodle_url('/enrol/apply/edit.php', array('courseid'=>$instance->courseid, 'id'=>$instance->id));
+            $instancesnode->add($this->get_instance_name($instance), $managelink, navigation_node::TYPE_SETTING);
+        }
+    }
 
 	public function get_user_enrolment_actions(course_enrolment_manager $manager, $ue) {
 		$actions = array();
@@ -203,12 +289,14 @@ function sendCancelMail($info){
 	global $CFG;
 	$apply_setting = $DB->get_records_sql("select name,value from ".$CFG->prefix."config_plugins where plugin='enrol_apply'");
 
+    /* START Academy Patch M#027 enrol_apply: Improve and theme appearance */
     $course = '<a href="'.$CFG->wwwroot.'/course/view.php?id='.$info->courseid.'">' . format_string($info->coursename) . '</a>';
 	$replace = array('firstname'=>$info->firstname,'content'=>$course,'lastname'=>$info->lastname,'username'=>$info->username);
+    /* END Academy Patch M#027 */
 	$body = $apply_setting['cancelmailcontent']->value;
 	$body = updateMailContent($body,$replace);
-	$contact = get_admin();
-	email_to_user($info, $contact, $apply_setting['cancelmailsubject']->value, '', $body);
+	$contact = core_user::get_support_user();
+	email_to_user($info, $contact, $apply_setting['cancelmailsubject']->value, html_to_text($body), $body);
 }
 
 function sendConfirmMail($info){
@@ -216,62 +304,186 @@ function sendConfirmMail($info){
 	global $CFG;
 	$apply_setting = $DB->get_records_sql("select name,value from ".$CFG->prefix."config_plugins where plugin='enrol_apply'");
 
+    /* START Academy Patch M#027 enrol_apply: Improve and theme appearance */
     $course = '<a href="'.$CFG->wwwroot.'/course/view.php?id='.$info->courseid.'">' . format_string($info->coursename) . '</a>';
 	$replace = array('firstname'=>$info->firstname,'content'=>$course,'lastname'=>$info->lastname,'username'=>$info->username);
+    /* END Academy Patch M#027 */
 	$body = $apply_setting['confirmmailcontent']->value;
 	$body = updateMailContent($body,$replace);
-	$contact = get_admin();
-	email_to_user($info, $contact, $apply_setting['confirmmailsubject']->value, '', $body);
+	$contact = core_user::get_support_user();
+	email_to_user($info, $contact, $apply_setting['confirmmailsubject']->value, html_to_text($body), $body);
 }
 
-function sendConfirmMailToTeachers($courseid,$instanceid,$desc){
+function sendConfirmMailToTeachers($instance,$info,$applydescription){
 	global $DB;
 	global $CFG;
-    global $SITE;
 	global $USER;
+
+	$courseid = $instance->courseid;
+	$instanceid = $instance->id;
 	$apply_setting = $DB->get_records_sql("select name,value from ".$CFG->prefix."config_plugins where plugin='enrol_apply'");
+
+	$show_standard_user_profile = $show_extra_user_profile = false;
+	if($instance->customint1 != ''){
+		($instance->customint1 == 0)?$show_standard_user_profile = true:$show_standard_user_profile = false;
+	}else{
+		($apply_setting['show_standard_user_profile']->value == 0)?$show_standard_user_profile = true:$show_standard_user_profile = false;
+	}
+
+	if($instance->customint2 != ''){
+		($instance->customint2 == 0)?$show_extra_user_profile = true:$show_extra_user_profile = false;
+	}else{
+		($apply_setting['show_extra_user_profile']->value == 0)?$show_extra_user_profile = true:$show_extra_user_profile = false;
+	}
 	
 	if($apply_setting['sendmailtoteacher']->value == 1){
 		$course = get_course($courseid);
 		$context =  context_course::instance($courseid, MUST_EXIST);
 		$teacherType = $DB->get_record('role',array("shortname"=>"editingteacher"));
+        
+        /* START Academy Patch M#027 enrol_apply: Improve and theme appearance */
+        if (!is_object($teacherType)) {
+            return;
+        }
+        /* END Academy Patch M#027 */
+        
 		$teachers = $DB->get_records('role_assignments', array('contextid'=>$context->id,'roleid'=>$teacherType->id));
 		foreach($teachers as $teacher){
 			$editTeacher = $DB->get_record('user',array('id'=>$teacher->userid));
-			$body = '<p><a href="'.$CFG->wwwroot.'/course/view.php?id='.$courseid.'">Course: '.format_string($course->fullname).'</a></p>'
-                    . '<p>First name: '.$USER->firstname.'</p><p>Last name: '.$USER->lastname.'</p>';
-			$body .= '<p>'. get_string('comment', 'enrol_apply') .': '.$desc.'</p>';
+            /* START Academy Patch M#027 enrol_apply: Improve and theme appearance */
+            $body = '<p>'. get_string('coursename', 'enrol_apply') .': <a href="'.$CFG->wwwroot.'/course/view.php?id='.$courseid.'">'.format_string($course->fullname).'</a></p>';
+            /* END Academy Patch M#027 */
+			$body .= '<p>'. get_string('applyuser', 'enrol_apply') .': '.$USER->firstname.' '.$USER->lastname.'</p>';
+			$body .= '<p>'. get_string('comment', 'enrol_apply') .': '.$applydescription.'</p>';
+
+			if($show_standard_user_profile){
+				$body .= '<p><strong>'. get_string('user_profile', 'enrol_apply').'</strong></p>';
+				$body .= '<p>'. get_string('firstname') .': '.$info->firstname.'</p>';
+				$body .= '<p>'. get_string('lastname') .': '.$info->lastname.'</p>';
+				$body .= '<p>'. get_string('email') .': '.$info->email.'</p>';
+				$body .= '<p>'. get_string('city') .': '.$info->city.'</p>';
+				$body .= '<p>'. get_string('country') .': '.$info->country.'</p>';
+				$body .= '<p>'. get_string('preferredlanguage') .': '.$info->lang.'</p>';
+				$body .= '<p>'. get_string('description') .': '.$info->description_editor['text'].'</p>';
+
+				$body .= '<p>'. get_string('firstnamephonetic') .': '.$info->firstnamephonetic.'</p>';
+				$body .= '<p>'. get_string('lastnamephonetic') .': '.$info->lastnamephonetic.'</p>';
+				$body .= '<p>'. get_string('middlename') .': '.$info->middlename.'</p>';
+				$body .= '<p>'. get_string('alternatename') .': '.$info->alternatename.'</p>';
+				$body .= '<p>'. get_string('url') .': '.$info->url.'</p>';
+				$body .= '<p>'. get_string('icqnumber') .': '.$info->icq.'</p>';
+				$body .= '<p>'. get_string('skypeid') .': '.$info->skype.'</p>';
+				$body .= '<p>'. get_string('aimid') .': '.$info->aim.'</p>';
+				$body .= '<p>'. get_string('yahooid') .': '.$info->yahoo.'</p>';
+				$body .= '<p>'. get_string('msnid') .': '.$info->msn.'</p>';
+				$body .= '<p>'. get_string('idnumber') .': '.$info->idnumber.'</p>';
+				$body .= '<p>'. get_string('institution') .': '.$info->institution.'</p>';
+				$body .= '<p>'. get_string('department') .': '.$info->department.'</p>';
+				$body .= '<p>'. get_string('phone') .': '.$info->phone1.'</p>';
+				$body .= '<p>'. get_string('phone2') .': '.$info->phone2.'</p>';
+				$body .= '<p>'. get_string('address') .': '.$info->address.'</p>';
+			}
+
+			if($show_extra_user_profile){
+				require_once($CFG->dirroot.'/user/profile/lib.php');
+				$user = $DB->get_record('user',array('id'=>$USER->id));
+				profile_load_custom_fields($user);
+				foreach ($user->profile as $key => $value) {
+					$body .= '<p>'. $key .': '.$value.'</p>';
+				}
+			}
+
 			$body .= '<p>'. html_writer::link(new moodle_url("/enrol/apply/apply.php", array('id'=>$courseid,'enrolid'=>$instanceid)), get_string('applymanage', 'enrol_apply')).'</p>';
-			$contact = get_admin();
+			$contact = core_user::get_support_user();
 			$info = $editTeacher;
 			$info->coursename = $course->fullname;
-			email_to_user($info, $contact, get_string('mailtoteacher_subject', 'enrol_apply', $SITE->fullname), '', $body);
+			email_to_user($info, $contact, get_string('mailtoteacher_suject', 'enrol_apply'), html_to_text($body), $body);
 		}
 	}
 }
 
-function sendConfirmMailToManagers($courseid,$desc){
+function sendConfirmMailToManagers($instance,$info,$applydescription){
 	global $DB;
 	global $CFG;
-	global $SITE;
 	global $USER;
+
+	$courseid = $instance->courseid;
 	$apply_setting = $DB->get_records_sql("select name,value from ".$CFG->prefix."config_plugins where plugin='enrol_apply'");
 
+	$show_standard_user_profile = $show_extra_user_profile = false;
+	if($instance->customint1 != ''){
+		($instance->customint1 == 0)?$show_standard_user_profile = true:$show_standard_user_profile = false;
+	}else{
+		($apply_setting['show_standard_user_profile']->value == 0)?$show_standard_user_profile = true:$show_standard_user_profile = false;
+	}
+
+	if($instance->customint2 != ''){
+		($instance->customint2 == 0)?$show_extra_user_profile = true:$show_extra_user_profile = false;
+	}else{
+		($apply_setting['show_extra_user_profile']->value == 0)?$show_extra_user_profile = true:$show_extra_user_profile = false;
+	}
+	
 	if($apply_setting['sendmailtomanager']->value == 1){
 		$course = get_course($courseid);
 		$context = context_system::instance();
 		$managerType = $DB->get_record('role',array("shortname"=>"manager"));
+        
+        /* START Academy Patch M#027 enrol_apply: Improve and theme appearance */
+        if (!is_object($managerType)) {
+            return;
+        }
+        /* END Academy Patch M#027 */
+        
 		$managers = $DB->get_records('role_assignments', array('contextid'=>$context->id,'roleid'=>$managerType->id));
 		foreach($managers as $manager){
 			$userWithManagerRole = $DB->get_record('user',array('id'=>$manager->userid));
-			$body = '<p><a href="'.$CFG->wwwroot.'/course/view.php?id='.$courseid.'">Course: '.format_string($course->fullname).'</a></p>'
-                    . '<p>First name: '.$USER->firstname.'</p><p>Last name: '.$USER->lastname.'</p>';
-			$body .= '<p>'. get_string('comment', 'enrol_apply') .': '.$desc.'</p>';
+			/* START Academy Patch M#027 enrol_apply: Improve and theme appearance */
+            $body = '<p>'. get_string('coursename', 'enrol_apply') .': <a href="'.$CFG->wwwroot.'/course/view.php?id='.$courseid.'">'.format_string($course->fullname).'</a></p>';
+            /* END Academy Patch M#027 */
+			$body .= '<p>'. get_string('applyuser', 'enrol_apply') .': '.$USER->firstname.' '.$USER->lastname.'</p>';
+			$body .= '<p>'. get_string('comment', 'enrol_apply') .': '.$applydescription.'</p>';
+			if($show_standard_user_profile){
+				$body .= '<p><strong>'. get_string('user_profile', 'enrol_apply').'</strong></p>';
+				$body .= '<p>'. get_string('firstname') .': '.$info->firstname.'</p>';
+				$body .= '<p>'. get_string('lastname') .': '.$info->lastname.'</p>';
+				$body .= '<p>'. get_string('email') .': '.$info->email.'</p>';
+				$body .= '<p>'. get_string('city') .': '.$info->city.'</p>';
+				$body .= '<p>'. get_string('country') .': '.$info->country.'</p>';
+				$body .= '<p>'. get_string('preferredlanguage') .': '.$info->lang.'</p>';
+				$body .= '<p>'. get_string('description') .': '.$info->description_editor['text'].'</p>';
+
+				$body .= '<p>'. get_string('firstnamephonetic') .': '.$info->firstnamephonetic.'</p>';
+				$body .= '<p>'. get_string('lastnamephonetic') .': '.$info->lastnamephonetic.'</p>';
+				$body .= '<p>'. get_string('middlename') .': '.$info->middlename.'</p>';
+				$body .= '<p>'. get_string('alternatename') .': '.$info->alternatename.'</p>';
+				$body .= '<p>'. get_string('url') .': '.$info->url.'</p>';
+				$body .= '<p>'. get_string('icqnumber') .': '.$info->icq.'</p>';
+				$body .= '<p>'. get_string('skypeid') .': '.$info->skype.'</p>';
+				$body .= '<p>'. get_string('aimid') .': '.$info->aim.'</p>';
+				$body .= '<p>'. get_string('yahooid') .': '.$info->yahoo.'</p>';
+				$body .= '<p>'. get_string('msnid') .': '.$info->msn.'</p>';
+				$body .= '<p>'. get_string('idnumber') .': '.$info->idnumber.'</p>';
+				$body .= '<p>'. get_string('institution') .': '.$info->institution.'</p>';
+				$body .= '<p>'. get_string('department') .': '.$info->department.'</p>';
+				$body .= '<p>'. get_string('phone') .': '.$info->phone1.'</p>';
+				$body .= '<p>'. get_string('phone2') .': '.$info->phone2.'</p>';
+				$body .= '<p>'. get_string('address') .': '.$info->address.'</p>';
+			}
+
+			if($show_extra_user_profile){
+				require_once($CFG->dirroot.'/user/profile/lib.php');
+				$user = $DB->get_record('user',array('id'=>$USER->id));
+				profile_load_custom_fields($user);
+				foreach ($user->profile as $key => $value) {
+					$body .= '<p>'. $key .': '.$value.'</p>';
+				}
+			}
+
 			$body .= '<p>'. html_writer::link(new moodle_url('/enrol/apply/manage.php'), get_string('applymanage', 'enrol_apply')).'</p>';
-			$contact = get_admin();
+			$contact = core_user::get_support_user();
 			$info = $userWithManagerRole;
 			$info->coursename = $course->fullname;
-			email_to_user($info, $contact, get_string('mailtoteacher_suject', 'enrol_apply'), '', $body);
+			email_to_user($info, $contact, get_string('mailtoteacher_suject', 'enrol_apply'), html_to_text($body), $body);
 		}
 	}
 }
@@ -279,8 +491,10 @@ function sendConfirmMailToManagers($courseid,$desc){
 function getRelatedInfo($enrolid){
 	global $DB;
 	global $CFG;
+    /* START Academy Patch M#027 enrol_apply: Improve and theme appearance */
 	return $DB->get_record_sql('select u.*,c.fullname as coursename, c.id as courseid from '.$CFG->prefix.'user_enrolments as ue left join '.$CFG->prefix.'user as u on ue.userid=u.id left join '.$CFG->prefix.'enrol as e on ue.enrolid=e.id left
 	join '.$CFG->prefix.'course as c on e.courseid=c.id where ue.id='.$enrolid);
+    /* END Academy Patch M#027 */
 }
 
 function updateMailContent($content,$replace){
