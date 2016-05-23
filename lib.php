@@ -17,10 +17,7 @@ class enrol_apply_plugin extends enrol_plugin {
 	* @return int id of new instance
 	*/
 	public function add_default_instance($course) {
-		$fields = array(
-		    'status'          => $this->get_config('status'),
-		    'roleid'          => $this->get_config('roleid', 0)
-		);
+		$fields = $this->get_instance_defaults();
 		return $this->add_instance($course, $fields);
 	}
 
@@ -72,7 +69,6 @@ class enrol_apply_plugin extends enrol_plugin {
 				return $OUTPUT->notification(get_string('maxenrolledreached', 'enrol_self'));
 			}
 		}
-
 		require_once("$CFG->dirroot/enrol/apply/locallib.php");
 
 		$form = new enrol_apply_enrol_form(NULL, $instance);
@@ -102,11 +98,13 @@ class enrol_apply_plugin extends enrol_plugin {
 
 				if(!$show_standard_user_profile && $show_extra_user_profile){
 					profile_save_data($userInfo);
-					//$res = $DB->update_record('user',$userInfoProfile);
-				}else{
-					profile_save_data($userInfo);
+					$res = $DB->update_record('user',$userInfoProfile);
 					//$res = $DB->update_record('user',$userInfo);
 				}
+				/*elseif($show_standard_user_profile && $show_extra_user_profile){
+					profile_save_data($userInfo);
+					$res = $DB->update_record('user',$userInfo);
+				}*/
 
 				$enrol = enrol_get_plugin('self');
 				$timestart = time();
@@ -123,6 +121,11 @@ class enrol_apply_plugin extends enrol_plugin {
 				}
 
 				$this->enrol_user($instance, $USER->id, $roleid, $timestart, $timeend,1);
+				$userenrolment = $DB->get_record('user_enrolments', array('userid' => $USER->id, 'enrolid' => $instance->id), 'id', MUST_EXIST);
+				$applicationinfo = new stdClass();
+				$applicationinfo->userenrolmentid = $userenrolment->id;
+				$applicationinfo->comment = $applydescription;
+				$DB->insert_record('enrol_apply_applicationinfo', $applicationinfo, false);
 				sendConfirmMailToTeachers($instance, $data, $applydescription);
 				sendConfirmMailToManagers($instance, $data, $applydescription);
 				
@@ -141,7 +144,7 @@ class enrol_apply_plugin extends enrol_plugin {
 				redirect("$CFG->wwwroot/course/view.php?id=$instance->courseid");
 			}
 		}
-
+		//exit;
 		ob_start();
 		$form->display();
 		$output = ob_get_clean();
@@ -239,15 +242,50 @@ class enrol_apply_plugin extends enrol_plugin {
 		}
 		return $actions;
 	}
+
+	/**
+	 * Returns defaults for new instances.
+	 * @return array
+	 */
+	public function get_instance_defaults() {
+	    $fields = array();
+	    $fields['status']          = $this->get_config('status');
+	    $fields['roleid']          = $this->get_config('roleid', 0);
+	    $fields['customint1']      = $this->get_config('show_standard_user_profile');
+	    $fields['customint2']      = $this->get_config('show_extra_user_profile');
+	    $fields['customint3']      = $this->get_config('sendmailtoteacher');
+	    $fields['customint4']      = $this->get_config('sendmailtomanager');
+
+	    return $fields;
+	}
 }
 
-function getAllEnrolment($id = null){
+function getAllEnrolment($id = null) {
 	global $DB;
-	global $CFG;
-	if($id){
-		$userenrolments = $DB->get_records_sql('select ue.userid,ue.id,u.firstname,u.lastname,u.email,u.picture,c.fullname as course,ue.timecreated from '.$CFG->prefix.'user_enrolments as ue left join '.$CFG->prefix.'user as u on ue.userid=u.id left join '.$CFG->prefix.'enrol as e on ue.enrolid=e.id left join '.$CFG->prefix.'course as c on e.courseid=c.id where ue.status=1 and e.courseid='.$id);
-	}else{
-		$userenrolments = $DB->get_records_sql('select ue.id,ue.userid,u.firstname,u.lastname,u.email,u.picture,c.fullname as course,ue.timecreated from '.$CFG->prefix.'user_enrolments as ue left join '.$CFG->prefix.'user as u on ue.userid=u.id left join '.$CFG->prefix.'enrol as e on ue.enrolid=e.id left join '.$CFG->prefix.'course as c on e.courseid=c.id where ue.status=1');
+	if ($id) {
+            $sql = 'SELECT ue.userid,ue.id,u.firstname,u.lastname,u.email,u.picture,c.fullname as course,ue.timecreated,ue.status
+                      FROM {course} c
+                      JOIN {enrol} e
+                        ON e.courseid = c.id
+                      JOIN {user_enrolments} ue
+                        ON ue.enrolid = e.id
+                      JOIN {user} u
+                        ON ue.userid = u.id
+                     WHERE ue.status != 0
+                       AND e.id = ?';
+            $userenrolments = $DB->get_records_sql($sql, array($id));
+	} else {
+            $sql = 'SELECT ue.id,ue.userid,u.firstname,u.lastname,u.email,u.picture,c.fullname as course,ue.timecreated
+                      FROM {user_enrolments} ue
+                 LEFT JOIN {user} u
+                        ON ue.userid = u.id
+                 LEFT JOIN {enrol} e
+                        ON ue.enrolid = e.id
+                 LEFT JOIN {course} c
+                        ON e.courseid = c.id
+                     WHERE ue.status != 0
+                       AND e.enrol = ?';
+            $userenrolments = $DB->get_records_sql($sql, array('apply'));
 	}
 	return $userenrolments;
 }
@@ -269,7 +307,22 @@ function confirmEnrolment($enrols){
 			@$roleAssignments->modifierid = 2;
 			$DB->insert_record('role_assignments',$roleAssignments);
 			$info = getRelatedInfo($enrol);
+			$DB->delete_records('enrol_apply_applicationinfo', array('userenrolmentid' => $enrol));
 			sendConfirmMail($info);
+		}
+	}
+}
+
+function waitEnrolment($enrols){
+	global $DB;
+	global $CFG;
+	foreach ($enrols as $enrol){
+		@$enroluser->id = $enrol;
+		@$enroluser->status = 2;
+
+		if($DB->update_record('user_enrolments',$enroluser)){
+			$info = getRelatedInfo($enrol);
+			sendWaitMail($info);
 		}
 	}
 }
@@ -279,6 +332,7 @@ function cancelEnrolment($enrols){
 	foreach ($enrols as $enrol){
 		$info = getRelatedInfo($enrol);
 		if($DB->delete_records('user_enrolments',array('id'=>$enrol))){
+			$DB->delete_records('enrol_apply_applicationinfo', array('userenrolmentid' => $enrol));
 			sendCancelMail($info);
 		}
 	}
@@ -314,6 +368,21 @@ function sendConfirmMail($info){
 	email_to_user($info, $contact, $apply_setting['confirmmailsubject']->value, html_to_text($body), $body);
 }
 
+function sendWaitMail($info){
+	global $DB;
+	global $CFG;
+    //global $USER;
+	$apply_setting = $DB->get_records_sql("select name,value from ".$CFG->prefix."config_plugins where plugin='enrol_apply'");
+
+	$replace = array('firstname'=>$info->firstname,'content'=>format_string($info->coursename),'lastname'=>$info->lastname,'username'=>$info->username);
+	$body = get_config('enrol_apply', 'waitmailcontent');
+	$body = updateMailContent($body,$replace);
+	$contact = get_admin();
+    //confirm mail will sent by the admin
+    //$contact = $USER;
+	email_to_user($info, $contact, get_config('enrol_apply', 'waitmailsubject'), html_to_text($body), $body);
+}
+
 function sendConfirmMailToTeachers($instance,$info,$applydescription){
 	global $DB;
 	global $CFG;
@@ -336,7 +405,7 @@ function sendConfirmMailToTeachers($instance,$info,$applydescription){
 		($apply_setting['show_extra_user_profile']->value == 0)?$show_extra_user_profile = true:$show_extra_user_profile = false;
 	}
 	
-	if($apply_setting['sendmailtoteacher']->value == 1){
+	if($instance->customint3 == 1){
 		$course = get_course($courseid);
 		$context =  context_course::instance($courseid, MUST_EXIST);
 		$teacherType = $DB->get_record('role',array("shortname"=>"editingteacher"));

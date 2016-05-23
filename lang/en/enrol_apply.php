@@ -16,12 +16,16 @@ $string['pluginname_desc'] = 'With this plug-in users can apply to be enrolled i
 
 $string['confirmmailsubject'] = 'Confirmation email subject';
 $string['confirmmailcontent'] = 'Confirmation email content';
+$string['waitmailsubject'] = 'Waiting list mail subject';
+$string['waitmailcontent'] = 'Waiting list mail content';
 $string['cancelmailsubject'] = 'Cancelation email subject';
 $string['cancelmailcontent'] = 'Cancelation email content';
 $string['confirmmailcontent_desc'] = 'Please use the following special marks to replace email content with data from Moodle.<br/>{firstname}:The first name of the user; {content}:The course name;{lastname}:The last name of the user;{username}:The users registration username';
+$string['waitmailcontent_desc'] = 'Please use the following special marks to replace email content with data from Moodle.<br/>{firstname}:The first name of the user; {content}:The course name;{lastname}:The last name of the user;{username}:The users registration username';
 $string['cancelmailcontent_desc'] = 'Please use the following special marks to replace email content with data from Moodle.<br/>{firstname}:The first name of the user; {content}:The course name;{lastname}:The last name of the user;{username}:The users registration username';
 
 $string['confirmusers'] = 'Enrol Confirm';
+$string['confirmusers_desc'] = 'Users in gray colored rows are on the waiting list.';
 /* START Academy Patch M#027 enrol_apply: Improve and theme appearance */
 $string['submitenrolment'] = 'Register';
 /* END Academy Patch M#027 */
@@ -32,6 +36,7 @@ $string['applyusermail'] = 'Email';
 $string['applydate'] = 'Enrol date';
 /* START Academy Patch M#027 enrol_apply: Improve and theme appearance */
 $string['btnconfirm'] = 'Confirm enrolments';
+$string['btnwait'] = 'put marked users on waiting list';
 $string['btncancel'] = 'Cancel enrolments';
 /* END Academy Patch M#027 */
 $string['enrolusers'] = 'Enrol users';
@@ -40,6 +45,7 @@ $string['status'] = 'Allow Course enrol confirmation';
 $string['confirmenrol'] = 'Manage application';
 
 $string['apply:config'] = 'Configure apply enrol instances';
+$string['apply:enrol'] = 'Enrol users';
 $string['apply:manage'] = 'Manage apply enrolment';
 $string['apply:unenrol'] = 'Cancel users from the course';
 $string['apply:unenrolapply'] = 'Cancel self from the course'; // is this necessary now?

@@ -38,7 +38,7 @@ if ($instanceid) {
     require_capability('moodle/course:enrolconfig', $context);
     // no instance yet, we have to add new instance
     navigation_node::override_active_url(new moodle_url('/enrol/instances.php', array('id'=>$course->id)));
-    $instance = new stdClass();
+    $instance = (object)$plugin->get_instance_defaults();
     $instance->id       = null;
     $instance->courseid = $course->id;
 }
@@ -55,6 +55,7 @@ if ($mform->is_cancelled()) {
         $instance->customtext1    = $data->customtext1;
         $instance->customint1    = $data->customint1;
         $instance->customint2    = $data->customint2;
+        $instance->customint3    = $data->customint3;
         $instance->roleid         = $data->roleid;
         $instance->timemodified   = time();
         $DB->update_record('enrol', $instance);
@@ -64,6 +65,7 @@ if ($mform->is_cancelled()) {
             'status'          =>$data->status,
             'name'            =>$data->name,
             'roleid'          =>$data->roleid,
+            'customint3'      =>$data->customint3,
             'customtext1'     =>$data->customtext1);
         $plugin->add_instance($course, $fields);
     }
@@ -71,7 +73,7 @@ if ($mform->is_cancelled()) {
     redirect($return);
 }
 
-$PAGE->set_heading($course->fullname);
+$PAGE->set_heading(format_string($course->fullname));
 $PAGE->set_title(get_string('pluginname', 'enrol_apply'));
 
 echo $OUTPUT->header();

@@ -31,8 +31,9 @@ $string['applyuser'] = 'First name / Surname';
 $string['applyusermail'] = 'Email';
 $string['applydate'] = 'Enroll date';
 /* START Academy Patch M#027 enrol_apply: Improve and theme appearance */
-$string['btnconfirm'] = 'Confirm enrolments';
-$string['btncancel'] = 'Cancel enrolments';
+$string['btnconfirm'] = 'Confirm enrollments';
+$string['btnwait'] = 'put marked users on waiting list';
+$string['btncancel'] = 'Cancel enrollments';
 /* END Academy Patch M#027 */
 $string['enrollusers'] = 'Enroll users';
 

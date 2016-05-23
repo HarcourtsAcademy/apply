@@ -18,8 +18,8 @@
  */
 defined('MOODLE_INTERNAL') || die();
 
-$plugin->version  = 2015110300;
+$plugin->version  = 2016042201;
 $plugin->requires = 2011080100;
 $plugin->maturity = MATURITY_STABLE;
-$plugin->release = 'Enrolment upon approval plugin Version 2.9-b';
-$plugin->component = 'enrol_apply';  // Full name of the plugin (used for diagnostics)
+$plugin->release = 'Enrolment upon approval plugin Version 3.0-d';
+$plugin->component = 'enrol_apply';
